@@ -55,7 +55,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
-            task_st: get_time_ms(),
+            task_st: 0,
             task_syscall_times: [0; MAX_SYSCALL_NUM],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
@@ -83,6 +83,7 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let task0 = &mut inner.tasks[0];
         task0.task_status = TaskStatus::Running;
+        task0.task_st = get_time_ms();
         let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -130,6 +131,9 @@ impl TaskManager {
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task = next;
+            if inner.tasks[next].task_st == 0 {
+                inner.tasks[next].task_st = get_time_ms();
+            }
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
             drop(inner);
@@ -154,6 +158,7 @@ impl TaskManager {
     /// Get the syscall information of the current task
     fn get_current_task_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
         let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
         inner.tasks[inner.current_task].task_syscall_times
     }
 
@@ -163,6 +168,13 @@ impl TaskManager {
         let current = inner.current_task;
         let now = get_time_ms();
         now - inner.tasks[current].task_st
+    }
+
+    /// Get task status
+    fn get_current_task_status(&self) -> TaskStatus {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].task_status
     }
 }
 
@@ -212,4 +224,9 @@ pub fn get_current_task_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
 /// Get current task time
 pub fn get_current_task_time() -> usize {
     TASK_MANAGER.get_current_task_time()
+}
+
+/// Get task status
+pub fn get_current_task_status() -> TaskStatus {
+    TASK_MANAGER.get_current_task_status()
 }
