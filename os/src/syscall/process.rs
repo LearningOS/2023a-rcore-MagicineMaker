@@ -1,11 +1,11 @@
 //! Process management syscalls
 use crate::{
-    config::MAX_SYSCALL_NUM,
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, current_user_token, TaskStatus,
+        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, current_user_token, current_insert_area, get_current_task_syscall_times, get_current_task_time, TaskStatus,
     },
     timer::get_time_us,
-    mm::{VirtAddr, PageTable},
+    mm::{VirtAddr, PageTable, MapPermission},
 };
 
 #[repr(C)]
@@ -70,15 +70,65 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// YOUR JOB: Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
-pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
+pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-    -1
+    let va = VirtAddr(ti as usize);
+    let pt = PageTable::from_token(current_user_token());
+    let ppn = pt.translate(va.floor()).unwrap().ppn();
+    let pa = (ppn.0 << 12) + va.page_offset();
+    let pa = pa as *mut TaskInfo;
+
+    let syscall_times = get_current_task_syscall_times();
+    let time = get_current_task_time();
+
+    unsafe { 
+        (*pa).status = TaskStatus::Running;
+        (*pa).syscall_times = syscall_times;
+        (*pa).time = time;
+    }
+    0
 }
 
 // YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    if len == 0 {
+        return 0;
+    }
+    
+    let va_start = VirtAddr(start);
+    let va_end = VirtAddr(start + len);
+
+    // 可能的错误: start 没有按页大小对齐 ;  port & !0x7 != 0 (port 其余位必须为0) ;  port & 0x7 = 0 (这样的内存无意义)
+    if port & !0x7 != 0 ||  port & 0x7 == 0 || !va_start.aligned() {
+        return -1;
+    }
+
+    // flag 
+    let mut flags = MapPermission::U;
+    if port & 1 != 0 {flags |= MapPermission::R;}
+    if port & 2 != 0 {flags |= MapPermission::W;}
+    if port & 4 != 0 {flags |= MapPermission::X;}
+
+    let pt = PageTable::from_token(current_user_token());
+    let mut va = va_start;
+    // 看看页表, 有没有已经映射的
+    while va < va_end {
+        let vpn = va.floor();
+        let pte = pt.translate(vpn);
+        if pte.is_some() && pte.unwrap().is_valid() {
+            return -1;
+        }
+        va.0 += PAGE_SIZE;
+    } 
+
+    println!("mmap in, flags = {:#b}", flags.bits());
+    current_insert_area(va_start, va_end, flags);
+    println!("mmap out");
+
+    // map
+
+    0
 }
 
 // YOUR JOB: Implement munmap.
