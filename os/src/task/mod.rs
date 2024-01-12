@@ -159,7 +159,7 @@ impl TaskManager {
     fn get_current_task_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        inner.tasks[inner.current_task].task_syscall_times
+        inner.tasks[current].task_syscall_times
     }
 
     /// Get task time
