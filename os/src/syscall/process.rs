@@ -4,7 +4,7 @@ use crate::{
     task::{
         change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, current_user_token, current_insert_area, current_shrink_area, get_current_task_syscall_times, get_current_task_time, TaskStatus,
     },
-    timer::get_time_us,
+    timer::{get_time_us, get_time_ms},
     mm::{VirtAddr, PageTable, MapPermission},
 };
 
@@ -72,19 +72,62 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-    let va = VirtAddr(ti as usize);
+    /*let va = VirtAddr(ti as usize);
     let pt = PageTable::from_token(current_user_token());
     let ppn = pt.translate(va.floor()).unwrap().ppn();
     let pa = (ppn.0 << 12) + va.page_offset();
-    let pa = pa as *mut TaskInfo;
+    let pa = pa as *mut TaskStatus;
+
+    unsafe {
+        *pa = TaskStatus::Running;
+    }
 
     let syscall_times = get_current_task_syscall_times();
-    let time = get_current_task_time();
+
+    let mut arr_va = unsafe {
+        VirtAddr(&mut ((*ti).syscall_times) as *mut u32 as usize)
+    };
+    for i in 0..MAX_SYSCALL_NUM {
+        let arr_ppn = pt.translate(arr_va.floor()).unwrap().ppn();
+        let arr_pa = (arr_ppn.0 << 12) + arr_va.page_offset();
+        let arr_pa = arr_pa as *mut u32;
+
+        unsafe {
+            *arr_pa = syscall_times[i];
+        }
+
+        arr_va = VirtAddr(usize::from(arr_va) + 4);
+    }
+
+    let time = get_time_ms();
+
+    let time_va = unsafe {
+        VirtAddr(&mut ((*ti).time) as *mut usize as usize)
+    };
+    let time_ppn = pt.translate(time_va.floor()).unwrap().ppn();
+    let time_pa = (time_ppn.0 << 12) + time_va.page_offset();
+    let time_pa = time_pa as *mut usize;
+
+    unsafe {
+        *time_pa = time;
+    }*/
+
+    let task_syscall_times = get_current_task_syscall_times();
+    let task_time = get_current_task_time();
+
+    let user_va = VirtAddr(ti as usize);
+    let fake_user_pt = PageTable::from_token(current_user_token());
+    let ppn = fake_user_pt.translate(user_va.floor()).unwrap().ppn();
+    let pa = (ppn.0 << 12) + user_va.page_offset();
+    let pa = pa as *mut TaskInfo;
+
 
     unsafe { 
-        (*pa).status = TaskStatus::Running;
-        (*pa).syscall_times = syscall_times;
-        (*pa).time = time;
+        *pa = TaskInfo {
+            status: TaskStatus::Running,
+            syscall_times: task_syscall_times, 
+            time: task_time,
+        };  
     }
     0
 }
