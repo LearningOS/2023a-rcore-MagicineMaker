@@ -2,8 +2,10 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
+        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, current_user_token, TaskStatus,
     },
+    timer::get_time_us,
+    mm::{VirtAddr, PageTable},
 };
 
 #[repr(C)]
@@ -41,9 +43,28 @@ pub fn sys_yield() -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let pt = PageTable::from_token(current_user_token());
+
+    let va1 = VirtAddr(ts as usize);
+    let ppn1 = pt.translate(va1.floor()).unwrap().ppn();
+    let pa1 = (ppn1.0 << 12) + va1.page_offset();
+
+    let va2 = VirtAddr((ts as usize) + 8);
+    let ppn2 = pt.translate(va2.floor()).unwrap().ppn();
+    let pa2 = (ppn2.0 << 12) + va2.page_offset();
+
+    let pa1 = pa1 as *mut usize;
+    let pa2 = pa2 as *mut usize;
+
+    let us = get_time_us();
+
+    unsafe {
+        *pa1 = us / 1_000_000;
+        *pa2 = us % 1_000_000;
+    }
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
