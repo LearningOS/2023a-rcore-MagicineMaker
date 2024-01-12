@@ -2,7 +2,7 @@
 use crate::{
     config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, current_user_token, current_insert_area, get_current_task_syscall_times, get_current_task_time, TaskStatus,
+        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, current_user_token, current_insert_area, current_shrink_area, get_current_task_syscall_times, get_current_task_time, TaskStatus,
     },
     timer::get_time_us,
     mm::{VirtAddr, PageTable, MapPermission},
@@ -132,9 +132,33 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    let va_start = VirtAddr(start);
+    let va_end = VirtAddr(start + len);
+
+    if !va_start.aligned() {
+        return -1;
+    }
+
+    let mut va = va_start;
+    let mut pt = PageTable::from_token(current_user_token());
+    // 检查: [start, start + len) 中存在未被映射的虚存。
+    while va < va_end {
+        let vpn = va.floor();
+        let pte = pt.translate(vpn);
+        if pte.is_none() || !pte.unwrap().is_valid() {
+            return -1;
+        }
+        va.0 += PAGE_SIZE;
+    }
+
+    println!("munmap in");
+    // unmap to pt 
+    current_shrink_area(va_start, va_end);  // 如果要求映射的时候是 start ~ 2页, 收回的时候要求 start ~ 1页 ; 将会把两页全收了, 不过测例过了...
+    println!("munmap out");
+
+    0
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

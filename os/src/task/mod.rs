@@ -245,3 +245,17 @@ pub fn get_current_task_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
 pub fn get_current_task_time() -> usize {
     TASK_MANAGER.get_current_task_time()
 }
+
+/// current insert memory area
+pub fn current_insert_area(start_va: crate::mm::VirtAddr, end_va: crate::mm::VirtAddr, permission: crate::mm::MapPermission) {
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let cur = inner.current_task;
+    inner.tasks[cur].memory_set.insert_framed_area(start_va, end_va, permission);
+}
+
+/// current shrink
+pub fn current_shrink_area(start: crate::mm::VirtAddr, new_start: crate::mm::VirtAddr) {
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let cur = inner.current_task;
+    inner.tasks[cur].memory_set.shrink_from(start, new_start);
+}
