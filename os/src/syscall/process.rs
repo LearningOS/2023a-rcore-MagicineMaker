@@ -121,7 +121,7 @@ pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     let pa = (ppn.0 << 12) + user_va.page_offset();
     let pa = pa as *mut TaskInfo;
 
-
+    //println!("current time: {}", get_time_us() / 1000);
     unsafe { 
         *pa = TaskInfo {
             status: TaskStatus::Running,

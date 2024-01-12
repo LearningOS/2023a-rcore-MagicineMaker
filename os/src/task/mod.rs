@@ -18,7 +18,7 @@ use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
-use crate::timer::get_time_ms;
+use crate::timer::{get_time_ms, get_time_us};
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
@@ -81,7 +81,8 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
-        next_task.task_st = get_time_ms();
+        next_task.task_st = get_time_us() / 1000;
+        println!("Task0 start at time {}.", next_task.task_st);
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -145,7 +146,8 @@ impl TaskManager {
             inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task = next;
             if inner.tasks[next].task_st == 0 {
-                inner.tasks[next].task_st = get_time_ms();
+                inner.tasks[next].task_st = get_time_us() / 1000;
+                println!("Task start at time {}.", inner.tasks[next].task_st);
             }
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -178,7 +180,7 @@ impl TaskManager {
     fn get_current_task_time(&self) -> usize {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        let now = get_time_ms();
+        let now = get_time_us() / 1000;
         now - inner.tasks[current].task_st
     }
 }
