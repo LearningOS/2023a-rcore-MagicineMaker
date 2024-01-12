@@ -17,7 +17,7 @@ mod task;
 use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
-use crate::timer::get_time_ms;
+use crate::timer::get_time_us;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -85,7 +85,7 @@ impl TaskManager {
         let task0 = &mut inner.tasks[0];
         task0.task_status = TaskStatus::Running;
         if !task0.task_run {
-            task0.task_st = get_time_ms();
+            task0.task_st = get_time_us() / 1000;
             task0.task_run = true;
             println!("Task0 start at time: {}", task0.task_st);
         }
@@ -139,7 +139,7 @@ impl TaskManager {
             let task = &mut inner.tasks[next];
             if !task.task_run {
                 task.task_run = true;
-                task.task_st = get_time_ms();
+                task.task_st = get_time_us() / 1000;
                 println!("Task start at time: {}", task.task_st);
             }
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
@@ -173,7 +173,7 @@ impl TaskManager {
     fn get_current_task_time(&self) -> usize {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        let now = get_time_ms();
+        let now = get_time_us() / 1000;
         now - inner.tasks[current].task_st
     }
 
