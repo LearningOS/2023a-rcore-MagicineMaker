@@ -4,7 +4,7 @@ use crate::{
     task::{
         change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, current_user_token, current_insert_area, current_shrink_area, get_current_task_syscall_times, get_current_task_time, TaskStatus,
     },
-    timer::{get_time_us, get_time_ms},
+    timer::get_time_us,
     mm::{VirtAddr, PageTable, MapPermission},
 };
 

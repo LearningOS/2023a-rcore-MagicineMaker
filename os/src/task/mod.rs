@@ -18,7 +18,7 @@ use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
-use crate::timer::{get_time_ms, get_time_us};
+use crate::timer::get_time_us;
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
