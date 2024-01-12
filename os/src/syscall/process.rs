@@ -142,7 +142,7 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
     }
 
     let mut va = va_start;
-    let mut pt = PageTable::from_token(current_user_token());
+    let pt = PageTable::from_token(current_user_token());
     // 检查: [start, start + len) 中存在未被映射的虚存。
     while va < va_end {
         let vpn = va.floor();
