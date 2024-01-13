@@ -108,7 +108,7 @@ lazy_static! {
     /// but we have user_shell, so we don't need to change it.
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(
         //get_app_data_by_name("ch5b_initproc").unwrap()
-        get_app_data_by_name("ch5_usertest").unwrap()
+        get_app_data_by_name("ch5b_initproc").unwrap()
     ));
 }
 
