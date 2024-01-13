@@ -2,13 +2,16 @@
 use alloc::sync::Arc;
 
 use crate::{
-    config::MAX_SYSCALL_NUM,
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     loader::get_app_data_by_name,
-    mm::{translated_refmut, translated_str},
+    mm::{
+        translated_refmut, translated_str, PageTable, current_insert_area, current_shrink_area,
+        VirtAddr, MapPermission},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus,
+        suspend_current_and_run_next, TaskStatus, TaskControlBlock,
     },
+    timer::get_time_us,
 };
 
 #[repr(C)]
@@ -122,7 +125,13 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let ts = translated_refmut(current_user_token(), _ts);
+    let us = crate::timer::get_time_us();
+    *ts = TimeVal{
+        sec: us / 1000_000,
+        usec: us % 1000_000, 
+    };
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -133,25 +142,85 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let ti = translated_refmut(current_user_token(), _ti);
+    let task = current_task().unwrap(); 
+    let task_inner = task.inner_exclusive_access();
+    let task_syscall_times = task_inner.get_syscall_times();
+    *ti = TaskInfo {
+        status: TaskStatus::Running,
+        syscall_times: task_syscall_times,
+        time: get_time_us() / 1000 - task_inner.get_start_time(),
+    };
+    //println!("first run is {}, now is {}, del = {}", task_inner.first_run_time, crate::timer::get_time_ms(), crate::timer::get_time_ms()-task_inner.first_run_time);
+    0
 }
 
 /// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!(
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    if len == 0 {
+        return 0;
+    }
+
+    let va_start = VirtAddr(start);
+    let va_end = VirtAddr(start + len);
+
+    if port & !0x7 != 0 ||  port & 0x7 == 0 || !va_start.aligned() {
+        return -1;
+    }
+
+    let mut flags = MapPermission::U;
+    if port & 1 != 0 {flags |= MapPermission::R;}
+    if port & 2 != 0 {flags |= MapPermission::W;}
+    if port & 4 != 0 {flags |= MapPermission::X;}
+
+    let pt = PageTable::from_token(current_user_token());
+    let mut va = va_start;
+    while va < va_end {
+        let vpn = va.floor();
+        let pte = pt.translate(vpn);
+        if pte.is_some() && pte.unwrap().is_valid() {
+            return -1;
+        }
+        va.0 += PAGE_SIZE;
+    } 
+
+    current_insert_area(va_start, va_end, flags);
+
+    0
 }
 
 /// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!(
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    
+    let va_start = VirtAddr(start);
+    let va_end = VirtAddr(start + len);
+
+    if !va_start.aligned() {
+        return -1;
+    }
+
+    let mut va = va_start;
+    let pt = PageTable::from_token(current_user_token());
+    while va < va_end {
+        let vpn = va.floor();
+        let pte = pt.translate(vpn);
+        if pte.is_none() || !pte.unwrap().is_valid() {
+            return -1;
+        }
+        va.0 += PAGE_SIZE;
+    }
+
+    current_shrink_area(va_start, va_end);
+
+    0
 }
 
 /// change data segment size
@@ -166,12 +235,30 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-pub fn sys_spawn(_path: *const u8) -> isize {
+pub fn sys_spawn(path: *const u8) -> isize {
     trace!(
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    
+    let path = translated_str(current_user_token(), path);
+    let app_data = get_app_data_by_name(path.as_str());
+        
+    if app_data.is_none() {
+        return -1;
+    }
+    let data = app_data.unwrap();
+
+    let task = TaskControlBlock::new(data);
+
+    let current_task = current_task().unwrap();
+    task.inner_exclusive_access().parent = Some(Arc::downgrade(&current_task));
+    let task_arc = Arc::new(task);
+    current_task.inner_exclusive_access().children.push(task_arc.clone());
+
+    add_task(task_arc.clone());
+    
+    task_arc.as_ref().getpid() as isize
 }
 
 // YOUR JOB: Set task priority.
@@ -180,5 +267,11 @@ pub fn sys_set_priority(_prio: isize) -> isize {
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    if _prio < 2 {
+        return -1;
+    }
+    let prio = _prio as usize;
+    current_task().unwrap().inner_exclusive_access().prio = prio;
+    current_task().unwrap().inner_exclusive_access().pass = crate::config::BIG_STRIDE / prio;
+    _prio
 }
