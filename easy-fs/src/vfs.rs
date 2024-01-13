@@ -183,4 +183,102 @@ impl Inode {
         });
         block_cache_sync_all();
     }
+
+    /// link_at
+    pub fn link_at(&self, old_name: String, new_name: String) {
+        let mut fs = self.fs.lock();
+        let mut osize = 0;
+        self.modify_disk_inode(|disk_inode| {
+            osize = disk_inode.size;
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let mut inode_id = 0;
+            // 遍历目录, 找到 old_name 对应的 inode_id
+            for i in 0..file_count {
+                let mut dirent = DirEntry::empty();
+                disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device);
+                if dirent.name() == old_name {
+                    inode_id = dirent.inode_id();
+                    break;
+                }
+            }
+            // 新建目录项, inode_id 和 old_name 的一样
+            let dirent = DirEntry::new(&new_name, inode_id);
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            // 写入目录项前, 扩增 size
+            self.increase_size(new_size as u32, disk_inode, &mut fs);
+            // 写入目录项
+            disk_inode.write_at(
+                (osize) as usize,
+                dirent.as_bytes(),
+                &self.block_device,
+            );
+        });
+        block_cache_sync_all();
+    }
+
+    /// unlinkat
+    pub fn unlink_at(&self, _name: String) {
+        let _fs = self.fs.lock();
+        self.modify_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            // 遍历目录
+            for i in 0..file_count{
+                let mut dirent = DirEntry::empty();
+                disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device);
+                // 找到 name 对应的目录项
+                if dirent.name() == _name {
+                    // 将其改写为一个几乎不会用的名字
+                    let buf =  DirEntry::new("______", u32::MAX);
+                    disk_inode.write_at(i * DIRENT_SZ, buf.as_bytes(), &self.block_device);
+                    disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device);
+                    break;
+                }
+            }
+        });
+        block_cache_sync_all();
+    }
+
+    /// 通过文件名得到 inode id
+    pub fn get_id_by_name(&self, name: &str) -> u32 {
+        let _fs = self.fs.lock();
+        let mut id = 0;
+        self.read_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            for i in 0..file_count {
+                let mut dirent = DirEntry::empty();
+                disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device);
+                if dirent.name() == name{
+                    id = dirent.inode_id();
+                }
+            }
+        });
+        id
+    }
+
+    /// 通过文件名得到 nlink
+    pub fn get_nlink_by_name(&self, name: &str) -> u32 {
+        let _fs = self.fs.lock();
+        let mut nlink = 0;
+        let mut id = 0;
+        self.read_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            for i in 0..file_count {
+                let mut dirent = DirEntry::empty();
+                disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device);
+                if dirent.name() == name {
+                    id = dirent.inode_id();
+                }
+            }
+
+            for i in 0..file_count {
+                let mut dirent = DirEntry::empty();
+                disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device);
+                if dirent.inode_id() == id{
+                    nlink += 1;
+                }
+            }
+        
+        });
+        nlink
+    }
 }

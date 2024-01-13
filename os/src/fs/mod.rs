@@ -48,3 +48,25 @@ bitflags! {
 
 pub use inode::{list_apps, open_file, OSInode, OpenFlags};
 pub use stdio::{Stdin, Stdout};
+
+///  创建一个文件的一个硬链接
+pub fn link_at(old_name: alloc::string::String, new_name: alloc::string::String) {
+    let ri = &inode::ROOT_INODE;
+    ri.link_at(old_name, new_name);
+}
+
+/// unlink_at
+pub fn unlink_at(name: alloc::string::String) {
+    let ri = &inode::ROOT_INODE;
+    ri.unlink_at(name);
+}
+
+/// 通过文件名得到 Stat
+pub fn set_file_stat_by_name(name: &alloc::string::String, st: &mut Stat) {
+    let ri = &inode::ROOT_INODE;
+    st.dev = 0;
+    st.ino = ri.get_id_by_name(name) as u64;
+    st.nlink = ri.get_nlink_by_name(name);
+    // 只有一个目录, 所以 MODE 不可能是 DIR
+    st.mode = StatMode::FILE;
+}

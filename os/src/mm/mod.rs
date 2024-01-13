@@ -29,3 +29,21 @@ pub fn init() {
     frame_allocator::init_frame_allocator();
     KERNEL_SPACE.exclusive_access().activate();
 }
+
+/// into mem_area to current task's mem_set 
+pub fn current_insert_area(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+    use crate::task::current_task;
+    let tcb = current_task().unwrap();
+    let mut tcb_inner = tcb.inner_exclusive_access();
+    tcb_inner.memory_set.insert_framed_area(start_va, end_va, permission);
+}
+
+/// shrink mem_area of current task's mem_set
+/// start_va: must be an area's start
+/// end_va: will be this area's new_start 
+pub fn current_shrink_area(start_va: VirtAddr, end_va: VirtAddr){
+    use crate::task::current_task;
+    let tcb = current_task().unwrap();
+    let mut tcb_inner = tcb.inner_exclusive_access();
+    tcb_inner.memory_set.shrink_from(start_va, end_va);
+}

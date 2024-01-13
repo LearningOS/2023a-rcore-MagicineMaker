@@ -71,6 +71,24 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+    
+    /// syscall times
+    //pub syscall_times: [u32; crate::config::MAX_SYSCALL_NUM],
+
+    /// first run time
+    pub start_time: usize,
+
+    /// prio
+    pub prio: usize,
+
+    /// stride 
+    pub stride: usize,
+
+    /// pass 
+    pub pass: usize,
+
+    /// file table
+    pub ftable: Vec<alloc::string::String>,
 }
 
 impl TaskControlBlockInner {
@@ -85,6 +103,12 @@ impl TaskControlBlockInner {
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
+    }
+    /*pub fn get_syscall_times(&self) -> [u32; crate::config::MAX_SYSCALL_NUM] {
+        self.syscall_times
+    }*/
+    pub fn get_start_time(&self) -> usize {
+        self.start_time
     }
     pub fn alloc_fd(&mut self) -> usize {
         if let Some(fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
@@ -134,7 +158,13 @@ impl TaskControlBlock {
                         Some(Arc::new(Stdout)),
                     ],
                     heap_bottom: user_sp,
-                    program_brk: user_sp,
+                    program_brk: user_sp,                    
+                    //syscall_times: [0; crate::config::MAX_SYSCALL_NUM],
+                    start_time: 0,
+                    prio: crate::config::INIT_PRIO,
+                    stride: 0,
+                    pass: crate::config::BIG_STRIDE / crate::config::INIT_PRIO,
+                    ftable: Vec::new(),
                 })
             },
         };
@@ -215,7 +245,13 @@ impl TaskControlBlock {
                     exit_code: 0,
                     fd_table: new_fd_table,
                     heap_bottom: parent_inner.heap_bottom,
-                    program_brk: parent_inner.program_brk,
+                    program_brk: parent_inner.program_brk,                    
+                    //syscall_times: [0; crate::config::MAX_SYSCALL_NUM],
+                    start_time: 0,
+                    prio: crate::config::INIT_PRIO,
+                    stride: 0,
+                    pass: crate::config::BIG_STRIDE / crate::config::INIT_PRIO,
+                    ftable: Vec::new(),
                 })
             },
         });
