@@ -54,8 +54,6 @@ impl TaskManager {
                 ret = tcb.clone();
                 index = i;
             }
-            
-            drop(tcb);
         }
         // -------- 从准备队列里, 找到 stride 最小的 tcb -----------
 
