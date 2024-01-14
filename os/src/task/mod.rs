@@ -82,7 +82,6 @@ impl TaskManager {
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
         next_task.task_st = get_time_us() / 1000;
-        println!("Task0 start at time {}.", next_task.task_st);
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -147,7 +146,6 @@ impl TaskManager {
             inner.current_task = next;
             if inner.tasks[next].task_st == 0 {
                 inner.tasks[next].task_st = get_time_us() / 1000;
-                println!("Task start at time {}.", inner.tasks[next].task_st);
             }
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -248,16 +246,16 @@ pub fn get_current_task_time() -> usize {
     TASK_MANAGER.get_current_task_time()
 }
 
-/// current insert memory area
+/// insert memory area
 pub fn current_insert_area(start_va: crate::mm::VirtAddr, end_va: crate::mm::VirtAddr, permission: crate::mm::MapPermission) {
     let mut inner = TASK_MANAGER.inner.exclusive_access();
     let cur = inner.current_task;
     inner.tasks[cur].memory_set.insert_framed_area(start_va, end_va, permission);
 }
 
-/// current shrink
-pub fn current_shrink_area(start: crate::mm::VirtAddr, new_start: crate::mm::VirtAddr) {
+/// remove memory area
+pub fn current_remove_area(start: crate::mm::VirtAddr, end: crate::mm::VirtAddr) {
     let mut inner = TASK_MANAGER.inner.exclusive_access();
     let cur = inner.current_task;
-    inner.tasks[cur].memory_set.shrink_from(start, new_start);
+    inner.tasks[cur].memory_set.remove(start, end);
 }

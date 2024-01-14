@@ -72,56 +72,16 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-    /*let va = VirtAddr(ti as usize);
-    let pt = PageTable::from_token(current_user_token());
-    let ppn = pt.translate(va.floor()).unwrap().ppn();
-    let pa = (ppn.0 << 12) + va.page_offset();
-    let pa = pa as *mut TaskStatus;
-
-    unsafe {
-        *pa = TaskStatus::Running;
-    }
-
-    let syscall_times = get_current_task_syscall_times();
-
-    let mut arr_va = unsafe {
-        VirtAddr(&mut ((*ti).syscall_times) as *mut u32 as usize)
-    };
-    for i in 0..MAX_SYSCALL_NUM {
-        let arr_ppn = pt.translate(arr_va.floor()).unwrap().ppn();
-        let arr_pa = (arr_ppn.0 << 12) + arr_va.page_offset();
-        let arr_pa = arr_pa as *mut u32;
-
-        unsafe {
-            *arr_pa = syscall_times[i];
-        }
-
-        arr_va = VirtAddr(usize::from(arr_va) + 4);
-    }
-
-    let time = get_time_ms();
-
-    let time_va = unsafe {
-        VirtAddr(&mut ((*ti).time) as *mut usize as usize)
-    };
-    let time_ppn = pt.translate(time_va.floor()).unwrap().ppn();
-    let time_pa = (time_ppn.0 << 12) + time_va.page_offset();
-    let time_pa = time_pa as *mut usize;
-
-    unsafe {
-        *time_pa = time;
-    }*/
 
     let task_syscall_times = get_current_task_syscall_times();
     let task_time = get_current_task_time();
 
-    let user_va = VirtAddr(ti as usize);
-    let fake_user_pt = PageTable::from_token(current_user_token());
-    let ppn = fake_user_pt.translate(user_va.floor()).unwrap().ppn();
-    let pa = (ppn.0 << 12) + user_va.page_offset();
+    let va = VirtAddr(ti as usize);
+    let pt = PageTable::from_token(current_user_token());
+    let ppn = pt.translate(va.floor()).unwrap().ppn();
+    let pa = (ppn.0 << 12) + va.page_offset();
     let pa = pa as *mut TaskInfo;
 
-    //println!("current time: {}", get_time_us() / 1000);
     unsafe { 
         *pa = TaskInfo {
             status: TaskStatus::Running,
@@ -138,24 +98,17 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     if len == 0 {
         return 0;
     }
-    
     let va_start = VirtAddr(start);
     let va_end = VirtAddr(start + len);
-
-    // 可能的错误: start 没有按页大小对齐 ;  port & !0x7 != 0 (port 其余位必须为0) ;  port & 0x7 = 0 (这样的内存无意义)
     if port & !0x7 != 0 ||  port & 0x7 == 0 || !va_start.aligned() {
         return -1;
     }
-
-    // flag 
     let mut flags = MapPermission::U;
     if port & 1 != 0 {flags |= MapPermission::R;}
     if port & 2 != 0 {flags |= MapPermission::W;}
     if port & 4 != 0 {flags |= MapPermission::X;}
-
     let pt = PageTable::from_token(current_user_token());
     let mut va = va_start;
-    // 看看页表, 有没有已经映射的
     while va < va_end {
         let vpn = va.floor();
         let pte = pt.translate(vpn);
@@ -164,13 +117,7 @@ pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
         }
         va.0 += PAGE_SIZE;
     } 
-
-    println!("mmap in, flags = {:#b}", flags.bits());
     current_insert_area(va_start, va_end, flags);
-    println!("mmap out");
-
-    // map
-
     0
 }
 
@@ -179,14 +126,11 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
     let va_start = VirtAddr(start);
     let va_end = VirtAddr(start + len);
-
     if !va_start.aligned() {
         return -1;
     }
-
     let mut va = va_start;
     let pt = PageTable::from_token(current_user_token());
-    // 检查: [start, start + len) 中存在未被映射的虚存。
     while va < va_end {
         let vpn = va.floor();
         let pte = pt.translate(vpn);
@@ -195,14 +139,10 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
         }
         va.0 += PAGE_SIZE;
     }
-
-    println!("munmap in");
-    // unmap to pt 
-    current_shrink_area(va_start, va_end);  // 如果要求映射的时候是 start ~ 2页, 收回的时候要求 start ~ 1页 ; 将会把两页全收了, 不过测例过了...
-    println!("munmap out");
-
+    current_remove_area(va_start, va_end);
     0
 }
+
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
     trace!("kernel: sys_sbrk");
