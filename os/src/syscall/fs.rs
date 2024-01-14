@@ -116,7 +116,6 @@ pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
     let old_name = translated_str(token, _old_name);
     let new_name = translated_str(token, _new_name);
 
-    // 可能的错误: 链接同名文件
     if old_name == new_name {return -1;}
 
     crate::fs::link_at(old_name, new_name);
@@ -132,6 +131,9 @@ pub fn sys_unlinkat(_name: *const u8) -> isize {
     );
     
     let name = translated_str(current_user_token(), _name);
+    let inode = open_file(&name, OpenFlags::RDONLY);
+    if inode.is_none() {return -1;}
+
     crate::fs::unlink_at(name);
 
     0 

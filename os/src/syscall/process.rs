@@ -6,7 +6,7 @@ use crate::{
     config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     fs::{open_file, OpenFlags},
     mm::{
-        translated_refmut, translated_str, PageTable, current_insert_area, current_shrink_area,
+        translated_refmut, translated_str, PageTable, current_insert_area, current_remove_area,
         VirtAddr, MapPermission},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
@@ -207,7 +207,7 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
         va.0 += PAGE_SIZE;
     }
 
-    current_shrink_area(va_start, va_end);
+    current_remove_area(va_start, va_end);
 
     0
 }
@@ -233,20 +233,17 @@ pub fn sys_spawn(_path: *const u8) -> isize {
     let path = translated_str(current_user_token(), _path);
     let app_inode = open_file(path.as_str(), OpenFlags::RDONLY);
         
-    if app_inode.is_none() {return -1;}  // 可能的错误: 无效的文件名。
+    if app_inode.is_none() {return -1;}
     let app_inode_arc = app_inode.unwrap();
     let data = (*app_inode_arc).read_all();
 
-    // 创建 tcb
     let task = TaskControlBlock::new(data.as_slice());
 
-    // 父子关系
     let current_task = current_task().unwrap();
     task.inner_exclusive_access().parent = Some(Arc::downgrade(&current_task));
     let task_arc = Arc::new(task);
     current_task.inner_exclusive_access().children.push(task_arc.clone());
 
-    // 加入队列
     add_task(task_arc.clone());
     task_arc.as_ref().getpid() as isize
 }
