@@ -284,23 +284,29 @@ impl MemorySet {
         } else {
             false
         }
-    }
-
-    /// shrink the area to new_start
+    }    
+    /// remove the area from start to end
     #[allow(unused)]
-    pub fn shrink_from(&mut self, start: VirtAddr, new_start: VirtAddr) -> bool {
-        if let Some(area) = self
-            .areas
-            .iter_mut()
-            .find(|area| area.vpn_range.get_start() == start.floor())
-        {
-            area.shrink_from(&mut self.page_table, new_start.floor());
-            true
-        } else {
-            false
+    pub fn remove(&mut self, start: VirtAddr, end: VirtAddr) -> bool {
+        let mut areas = &mut self.areas;
+        for index in 0..areas.len() {
+            if VirtAddr::from(areas[index].vpn_range.get_start()) <= start && VirtAddr::from(areas[index].vpn_range.get_end()) >= end {
+                let new_start = areas[index].vpn_range.get_start();
+                let new_end = areas[index].vpn_range.get_end();
+                let perm = areas[index].map_perm;
+                areas[index].shrink_to(&mut self.page_table, new_start);
+                areas.remove(index);
+                if new_start < start.floor() {
+                    self.insert_framed_area(new_start.into(), start, perm);
+                }
+                if new_end > end.ceil() {
+                    self.insert_framed_area(end, new_end.into(), perm);
+                }
+                return true;
+            }
         }
+        false
     }
-
     /// append the area to new_end
     #[allow(unused)]
     pub fn append_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
@@ -385,13 +391,6 @@ impl MapArea {
             self.unmap_one(page_table, vpn)
         }
         self.vpn_range = VPNRange::new(self.vpn_range.get_start(), new_end);
-    }
-    #[allow(unused)]
-    pub fn shrink_from(&mut self, page_table: &mut PageTable, new_start: VirtPageNum) {
-        for vpn in VPNRange::new(self.vpn_range.get_start(), new_start) {
-            self.unmap_one(page_table, vpn)
-        }
-        self.vpn_range = VPNRange::new(new_start, self.vpn_range.get_end());
     }
     #[allow(unused)]
     pub fn append_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {

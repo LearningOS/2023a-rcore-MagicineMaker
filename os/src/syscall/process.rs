@@ -5,7 +5,7 @@ use crate::{
     config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     loader::get_app_data_by_name,
     mm::{
-        translated_refmut, translated_str, PageTable, current_insert_area, current_shrink_area,
+        translated_refmut, translated_str, PageTable, current_insert_area, current_remove_area,
         VirtAddr, MapPermission},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
@@ -218,7 +218,7 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
         va.0 += PAGE_SIZE;
     }
 
-    current_shrink_area(va_start, va_end);
+    current_remove_area(va_start, va_end);
 
     0
 }
